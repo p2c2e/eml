@@ -16,7 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sg3des/eml/decoder"
+	"github.com/p2c2e/eml/decoder"
+	"jaytaylor.com/html2text"
 )
 
 var benc = base64.URLEncoding
@@ -46,7 +47,7 @@ type HeaderInfo struct {
 	Comments    []string
 	Keywords    []string
 	ContentType string
-
+	ContentTransferEncoding string
 	InReply    []string
 	References []string
 }
@@ -84,6 +85,8 @@ func Process(r RawMessage) (m Message, e error) {
 		h := Header{string(rh.Key), string(rh.Value)}
 		m.FullHeaders = append(m.FullHeaders, h)
 		switch string(rh.Key) {
+		case `Content-Transfer-Encoding`:
+			m.ContentTransferEncoding = string(rh.Value)
 		case `Content-Type`:
 			m.ContentType = string(rh.Value)
 		case `Message-ID`:
@@ -156,12 +159,31 @@ func Process(r RawMessage) (m Message, e error) {
 					m.Text = string(data)
 				}
 			case strings.Contains(part.Type, "text/html"):
-
-				data, err := decoder.UTF8(part.Charset, part.Data)
-				if err != nil {
-					m.Html = string(part.Data)
-				} else {
-					m.Html = string(data)
+				if  m.ContentTransferEncoding != "" {
+					switch m.ContentTransferEncoding {
+					case "base64":
+						part.Data, er = base64.StdEncoding.DecodeString(string(part.Data))
+						if er != nil {
+							fmt.Println(er, "failed decode base64")
+						}
+					case "quoted-printable":
+						//fmt.Println("QUOTED PRINTABLE BLOCK >>>>>>>>>>>>>>>>>.")
+						data, err := decoder.UTF8(part.Charset, part.Data)
+						if err != nil {
+							part.Data, _ = ioutil.ReadAll(quotedprintable.NewReader(bytes.NewReader(part.Data)))
+							m.Html = string(data)
+						} else {
+							part.Data, _ = ioutil.ReadAll(quotedprintable.NewReader(bytes.NewReader(data)))
+							m.Html = string(part.Data)
+						}
+						text, err := html2text.FromString(m.Html, html2text.Options{PrettyTables: true})
+						if err != nil {
+							panic(err)
+						}
+						m.Text = text
+						m.Body = []byte(text)
+						part.Data = m.Body
+					}
 				}
 
 			default:
@@ -200,7 +222,9 @@ func Process(r RawMessage) (m Message, e error) {
 
 		m.Parts = parts
 		m.ContentType = parts[0].Type
-		m.Text = string(parts[0].Data)
+		if m.Text == "" {
+			m.Text = string(parts[0].Data)
+		}
 	} else {
 		m.Text = string(r.Body)
 	}

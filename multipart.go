@@ -24,15 +24,17 @@ type Part struct {
 // present; otherwise, it will contain a single entry, with the entire (raw)
 // message contents.
 func parseBody(ct string, body []byte) (parts []Part, err error) {
-	_, ps, err := mime.ParseMediaType(ct)
+
+	mt , ps, err := mime.ParseMediaType(ct)
 	if err != nil {
 		return
 	}
 
-	// if mt != "multipart/alternative" {
-	// 	parts = append(parts, Part{ct, body, nil})
-	// 	return
-	// }
+	// TODO: Hardcoded Charset ...
+	if mt != "multipart/alternative" {
+		parts = append(parts, Part{ct, "utf-8", body, nil })
+		return parts, nil
+	}
 
 	boundary, ok := ps["boundary"]
 	if !ok {

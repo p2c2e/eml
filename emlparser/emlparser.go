@@ -7,7 +7,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/sg3des/eml"
+	"github.com/p2c2e/eml"
 )
 
 var (
